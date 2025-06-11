@@ -305,7 +305,7 @@ impl Cli {
             },
             log_to_stdout: std::env::var_os("Q_LOG_STDOUT").is_some() || self.verbose > 0,
             log_file_path: match self.subcommand {
-                Some(CliRootCommands::Chat { .. }) => Some("chat.log".to_owned()),
+                Some(CliRootCommands::Chat { .. }) => Some("qchat.log".to_owned()),
                 Some(CliRootCommands::Translate(..)) => Some("translate.log".to_owned()),
                 Some(CliRootCommands::Internal(InternalSubcommand::Multiplexer(_))) => Some("mux.log".to_owned()),
                 _ => match fig_log::get_log_level_max() >= Level::DEBUG {
@@ -426,6 +426,7 @@ impl Cli {
         }
 
         let mut cmd = tokio::process::Command::new(qchat_path()?);
+        // let mut cmd = tokio::process::Command::new("/path/to/amazon-q-developer-cli-autocomplete/target/debug/chat_cli");
         cmd.arg(subcmd);
         if let Some(args) = args {
             cmd.args(args);

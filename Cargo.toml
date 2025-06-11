@@ -158,6 +158,7 @@ tracing-subscriber = { version = "0.3.19", features = [
     "fmt",
     "parking_lot",
     "time",
+    "valuable",
 ] }
 unicode-width = "0.2.0"
 url = "2.5.4"

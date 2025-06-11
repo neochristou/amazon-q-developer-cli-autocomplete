@@ -55,6 +55,7 @@ pub struct LogGuard {
     _file_guard: Option<WorkerGuard>,
     _stdout_guard: Option<WorkerGuard>,
     _mcp_file_guard: Option<WorkerGuard>,
+    _agent_traces_guard: Option<WorkerGuard>,
 }
 
 /// Initialize our application level logging using the given LogArgs.
@@ -68,6 +69,7 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
     let (reloadable_filter_layer, reloadable_handle) = tracing_subscriber::reload::Layer::new(filter_layer);
     ENV_FILTER_RELOADABLE_HANDLE.lock().unwrap().replace(reloadable_handle);
     let mut mcp_path = None;
+    let mut agent_traces_path = None;
 
     // First we construct the file logging layer if a file name was provided.
     let (file_layer, _file_guard) = match args.log_file_path {
@@ -76,8 +78,9 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
 
             // Make the log path parent directory if it doesn't exist.
             if let Some(parent) = log_path.parent() {
-                if log_path.ends_with("chat.log") {
+                if log_path.ends_with("qchat.log") {
                     mcp_path = Some(parent.to_path_buf());
+                    agent_traces_path = Some(parent.to_path_buf());
                 }
                 std::fs::create_dir_all(parent)?;
             }
@@ -157,6 +160,39 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
         (None, None)
     };
 
+   // Set up agent traces logger (similar to MCP logger)
+   let (agent_traces_layer, _agent_traces_guard) = if let Some(parent) = agent_traces_path {
+       let agent_traces_path = parent.join("agent_traces.log");
+       if args.delete_old_log_file {
+           std::fs::remove_file(&agent_traces_path).ok();
+       } else if agent_traces_path.exists() && std::fs::metadata(&agent_traces_path)?.len() > MAX_FILE_SIZE {
+           std::fs::remove_file(&agent_traces_path)?;
+       }
+       let file = if args.delete_old_log_file {
+           File::create(&agent_traces_path)?
+       } else {
+           File::options().append(true).create(true).open(&agent_traces_path)?
+       };
+       #[cfg(unix)]
+       {
+           use std::os::unix::fs::PermissionsExt;
+           if let Ok(metadata) = file.metadata() {
+               let mut permissions = metadata.permissions();
+               permissions.set_mode(0o600);
+               file.set_permissions(permissions).ok();
+           }
+       }
+       let (non_blocking, guard) = tracing_appender::non_blocking(file);
+       let file_layer = fmt::layer()
+           .with_line_number(true)
+           .json()
+           .with_writer(non_blocking)
+           .with_filter(EnvFilter::new("agent_traces=trace")); // Filter for agent traces
+       (Some(file_layer), Some(guard))
+   } else {
+       (None, None)
+   };
+
     if let Some(level) = args.log_level {
         set_log_level(level)?;
     }
@@ -165,16 +201,9 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
     let subscriber = tracing_subscriber::registry()
         .with(reloadable_filter_layer)
         .with(file_layer)
-        .with(stdout_layer);
-
-    if let Some(mcp_server_layer) = mcp_server_layer {
-        subscriber.with(mcp_server_layer).init();
-        return Ok(LogGuard {
-            _file_guard,
-            _stdout_guard,
-            _mcp_file_guard,
-        });
-    }
+        .with(stdout_layer)
+        .with(agent_traces_layer)
+        .with(mcp_server_layer);
 
     subscriber.init();
 
@@ -182,6 +211,7 @@ pub fn initialize_logging<T: AsRef<Path>>(args: LogArgs<T>) -> Result<LogGuard, 
         _file_guard,
         _stdout_guard,
         _mcp_file_guard,
+        _agent_traces_guard,
     })
 }
 

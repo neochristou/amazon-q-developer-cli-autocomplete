@@ -10,6 +10,7 @@ use std::sync::{
     RwLock as SyncRwLock,
 };
 use std::time::Duration;
+use valuable::Valuable;
 
 use serde::{
     Deserialize,
@@ -271,6 +272,10 @@ where
             serde_json::from_value::<ServerCapabilities>(cap)?
         };
         self.notify("initialized", None).await?;
+        tracing::info!(
+            target: "agent_traces",
+            event = "ServerInitialized",
+            server_name = self.server_name);
 
         // TODO: group this into examine_server_capabilities
         // Prefetch prompts in the background. We should only do this after the server has been
@@ -574,7 +579,17 @@ where
     lock.clear();
     for prompt in prompts {
         let name = prompt.name.clone();
-        lock.insert(name, prompt);
+        let descr = prompt.description.clone();
+        let args = prompt.arguments.clone();
+        lock.insert(name.clone(), prompt);
+        tracing::info!(
+            target: "agent_traces",
+            event = "ServerPrompt",
+            server_name = client.server_name,
+            prompt_name = name,
+            prompt_description = descr,
+            prompt_arguments = args.as_value(),
+        );
     }
 }
 
