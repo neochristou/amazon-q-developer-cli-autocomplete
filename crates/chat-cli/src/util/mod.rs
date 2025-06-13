@@ -9,21 +9,14 @@ pub mod system_info;
 pub mod test;
 
 use std::fmt::Display;
-use std::io::{
-    ErrorKind,
-    stdout,
-};
+use std::io::{ErrorKind, stdout};
 
 use anstream::stream::IsTerminal;
 pub use cli_context::CliContext;
 pub use consts::*;
 use dialoguer::Select;
 use dialoguer::theme::ColorfulTheme;
-use eyre::{
-    Context,
-    Result,
-    bail,
-};
+use eyre::{Context, Result, bail};
 use thiserror::Error;
 use tracing::warn;
 

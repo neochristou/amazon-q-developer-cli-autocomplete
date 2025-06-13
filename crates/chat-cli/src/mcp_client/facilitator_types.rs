@@ -1,9 +1,6 @@
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use valuable_derive::Valuable;
+// use valuable_derive::Valuable;
 
 /// https://spec.modelcontextprotocol.io/specification/2024-11-05/server/utilities/pagination/#operations-supporting-pagination
 #[allow(clippy::enum_variant_names)]
@@ -96,7 +93,8 @@ pub struct PromptsListResult {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+// #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Represents an argument to be supplied to a [PromptGet]
 pub struct PromptGetArg {

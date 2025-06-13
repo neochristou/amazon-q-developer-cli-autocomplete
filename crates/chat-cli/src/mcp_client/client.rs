@@ -1,54 +1,23 @@
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{
-    AtomicBool,
-    AtomicU64,
-    Ordering,
-};
-use std::sync::{
-    Arc,
-    RwLock as SyncRwLock,
-};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-use valuable::Valuable;
+// use valuable::Valuable;
 
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time;
 use tokio::time::error::Elapsed;
 
-use super::transport::base_protocol::{
-    JsonRpcMessage,
-    JsonRpcNotification,
-    JsonRpcRequest,
-    JsonRpcVersion,
-};
+use super::transport::base_protocol::{JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcVersion};
 use super::transport::stdio::JsonRpcStdioTransport;
-use super::transport::{
-    self,
-    Transport,
-    TransportError,
-};
+use super::transport::{self, Transport, TransportError};
 use super::{
-    JsonRpcResponse,
-    Listener as _,
-    LogListener,
-    Messenger,
-    PaginationSupportedOps,
-    PromptGet,
-    PromptsListResult,
-    ResourceTemplatesListResult,
-    ResourcesListResult,
-    ServerCapabilities,
-    ToolsListResult,
+    JsonRpcResponse, Listener as _, LogListener, Messenger, PaginationSupportedOps, PromptGet, PromptsListResult,
+    ResourceTemplatesListResult, ResourcesListResult, ServerCapabilities, ToolsListResult,
 };
-use crate::util::process::{
-    Pid,
-    terminate_process,
-};
+use crate::util::process::{Pid, terminate_process};
 
 pub type ClientInfo = serde_json::Value;
 pub type StdioTransport = JsonRpcStdioTransport;
@@ -272,10 +241,10 @@ where
             serde_json::from_value::<ServerCapabilities>(cap)?
         };
         self.notify("initialized", None).await?;
-        tracing::info!(
-            target: "agent_traces",
-            event = "ServerInitialized",
-            server_name = self.server_name);
+        // tracing::info!(
+        //     target: "agent_traces",
+        //     event = "ServerInitialized",
+        //     server_name = self.server_name);
 
         // TODO: group this into examine_server_capabilities
         // Prefetch prompts in the background. We should only do this after the server has been
@@ -579,17 +548,17 @@ where
     lock.clear();
     for prompt in prompts {
         let name = prompt.name.clone();
-        let descr = prompt.description.clone();
-        let args = prompt.arguments.clone();
-        lock.insert(name.clone(), prompt);
-        tracing::info!(
-            target: "agent_traces",
-            event = "ServerPrompt",
-            server_name = client.server_name,
-            prompt_name = name,
-            prompt_description = descr,
-            prompt_arguments = args.as_value(),
-        );
+        // let descr = prompt.description.clone();
+        // let args = prompt.arguments.clone();
+        lock.insert(name, prompt);
+        // tracing::info!(
+        //     target: "agent_traces",
+        //     event = "ServerPrompt",
+        //     server_name = client.server_name,
+        //     prompt_name = name,
+        //     prompt_description = descr,
+        //     prompt_arguments = args.as_value(),
+        // );
     }
 }
 

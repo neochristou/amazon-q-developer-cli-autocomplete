@@ -21,74 +21,35 @@ mod uninstall;
 mod update;
 mod user;
 
-use std::io::{
-    Write as _,
-    stdout,
-};
+use std::io::{Write as _, stdout};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anstream::{
-    eprintln,
-    println,
-};
-use clap::{
-    ArgAction,
-    CommandFactory,
-    Parser,
-    Subcommand,
-    ValueEnum,
-};
+use anstream::{eprintln, println};
+use clap::{ArgAction, CommandFactory, Parser, Subcommand, ValueEnum};
 use crossterm::style::Stylize;
-use eyre::{
-    Result,
-    WrapErr,
-    bail,
-};
+use eyre::{Result, WrapErr, bail};
 use feed::Feed;
-use fig_auth::builder_id::{
-    BuilderIdToken,
-    DeviceRegistration,
-};
+use fig_auth::builder_id::{BuilderIdToken, DeviceRegistration};
 use fig_auth::consts::OIDC_BUILDER_ID_REGION;
 use fig_auth::is_logged_in;
 use fig_auth::pkce::Region;
 use fig_auth::secret_store::SecretStore;
 use fig_ipc::local::open_ui_element;
-use fig_log::{
-    LogArgs,
-    initialize_logging,
-};
+use fig_log::{LogArgs, initialize_logging};
 use fig_proto::local::UiElement;
 use fig_settings::sqlite::database;
 use fig_util::directories::home_local_bin;
-use fig_util::{
-    CLI_BINARY_NAME,
-    PRODUCT_NAME,
-    directories,
-    manifest,
-    system_info,
-};
+use fig_util::{CLI_BINARY_NAME, PRODUCT_NAME, directories, manifest, system_info};
 use internal::InternalSubcommand;
 use serde::Serialize;
 use tokio::signal::ctrl_c;
-use tracing::{
-    Level,
-    debug,
-    error,
-    warn,
-};
+use tracing::{Level, debug, error, warn};
 
 use self::integrations::IntegrationsSubcommands;
 use self::user::RootUserSubcommand;
-use crate::util::desktop::{
-    LaunchArgs,
-    launch_fig_desktop,
-};
-use crate::util::{
-    CliContext,
-    assert_logged_in,
-};
+use crate::util::desktop::{LaunchArgs, launch_fig_desktop};
+use crate::util::{CliContext, assert_logged_in};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
@@ -428,7 +389,9 @@ impl Cli {
         let mut cmd = tokio::process::Command::new(qchat_path()?);
         // let mut cmd = tokio::process::Command::new("/path/to/amazon-q-developer-cli-autocomplete/target/debug/chat_cli");
         cmd.arg(subcmd);
+        // println!("Executing {:?} {:?}", qchat_path()?, subcmd);
         if let Some(args) = args {
+            // println!("Args: {:?}", args.clone());
             cmd.args(args);
         }
 
@@ -601,8 +564,14 @@ fn qchat_path() -> Result<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn qchat_path() -> Result<PathBuf> {
+    use fig_os_shim::Context;
     use fig_util::consts::CHAT_BINARY_NAME;
     use macos_utils::bundle::get_bundle_path_for_executable;
+
+    let ctx = Context::new();
+    if let Some(path) = ctx.process_info().current_pid().exe() {
+        return Ok(path.parent().unwrap().join("chat_cli"));
+    }
 
     Ok(get_bundle_path_for_executable(CHAT_BINARY_NAME).unwrap_or(home_local_bin()?.join(CHAT_BINARY_NAME)))
 }

@@ -17,155 +17,57 @@ pub mod tools;
 pub mod util;
 
 use std::borrow::Cow;
-use std::collections::{
-    HashMap,
-    HashSet,
-    VecDeque,
-};
-use std::io::{
-    IsTerminal,
-    Read,
-    Write,
-};
-use std::process::{
-    Command as ProcessCommand,
-    ExitCode,
-};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::io::{IsTerminal, Read, Write};
+use std::process::{Command as ProcessCommand, ExitCode};
 use std::sync::Arc;
 use std::time::Duration;
-use std::{
-    env,
-    fs,
-    io,
-};
+use std::{env, fs, io};
 
 use clap::Args;
-use command::{
-    Command,
-    PromptsSubcommand,
-    ToolsSubcommand,
-};
-use consts::{
-    CONTEXT_FILES_MAX_SIZE,
-    CONTEXT_WINDOW_SIZE,
-    DUMMY_TOOL_NAME,
-};
+use command::{Command, PromptsSubcommand, ToolsSubcommand};
+use consts::{CONTEXT_FILES_MAX_SIZE, CONTEXT_WINDOW_SIZE, DUMMY_TOOL_NAME};
 use context::ContextManager;
 pub use conversation_state::ConversationState;
 use conversation_state::TokenWarningLevel;
-use crossterm::style::{
-    Attribute,
-    Color,
-    Stylize,
-};
-use crossterm::{
-    cursor,
-    execute,
-    queue,
-    style,
-    terminal,
-};
-use dialoguer::{
-    Error as DError,
-    Select,
-};
-use eyre::{
-    ErrReport,
-    Result,
-    bail,
-};
-use hooks::{
-    Hook,
-    HookTrigger,
-};
+use crossterm::style::{Attribute, Color, Stylize};
+use crossterm::{cursor, execute, queue, style, terminal};
+use dialoguer::{Error as DError, Select};
+use eyre::{ErrReport, Result, bail};
+use hooks::{Hook, HookTrigger};
 use input_source::InputSource;
-use message::{
-    AssistantMessage,
-    AssistantToolUse,
-    ToolUseResult,
-    ToolUseResultBlock,
-};
-use parse::{
-    ParseState,
-    interpret_markdown,
-};
-use parser::{
-    RecvErrorKind,
-    ResponseParser,
-};
+use message::{AssistantMessage, AssistantToolUse, ToolUseResult, ToolUseResultBlock};
+use parse::{ParseState, interpret_markdown};
+use parser::{RecvErrorKind, ResponseParser};
 use regex::Regex;
 use serde_json::Map;
-use spinners::{
-    Spinner,
-    Spinners,
-};
+use spinners::{Spinner, Spinners};
 use thiserror::Error;
-use token_counter::{
-    TokenCount,
-    TokenCounter,
-};
+use token_counter::{TokenCount, TokenCounter};
 use tokio::signal::ctrl_c;
-use tool_manager::{
-    GetPromptError,
-    LoadingRecord,
-    McpServerConfig,
-    PromptBundle,
-    ToolManager,
-    ToolManagerBuilder,
-};
+use tool_manager::{GetPromptError, LoadingRecord, McpServerConfig, PromptBundle, ToolManager, ToolManagerBuilder};
 use tools::gh_issue::GhIssueContext;
-use tools::{
-    OutputKind,
-    QueuedTool,
-    Tool,
-    ToolOrigin,
-    ToolPermissions,
-    ToolSpec,
-};
-use tracing::{
-    debug,
-    error,
-    info,
-    trace,
-    warn,
-};
+use tools::{OutputKind, QueuedTool, Tool, ToolOrigin, ToolPermissions, ToolSpec};
+use tracing::{debug, error, info, trace, warn};
 use unicode_width::UnicodeWidthStr;
 use util::images::RichImageBlock;
-use util::shared_writer::{
-    NullWriter,
-    SharedWriter,
-};
+use util::shared_writer::{NullWriter, SharedWriter};
 use util::ui::draw_box;
-use util::{
-    animate_output,
-    drop_matched_context_files,
-    play_notification_bell,
-};
+use util::{animate_output, drop_matched_context_files, play_notification_bell};
 use uuid::Uuid;
 use winnow::Partial;
 use winnow::stream::Offset;
 
 use crate::api_client::StreamingClient;
 use crate::api_client::clients::SendMessageOutput;
-use crate::api_client::model::{
-    ChatResponseStream,
-    Tool as FigTool,
-    ToolResultStatus,
-};
+use crate::api_client::model::{ChatResponseStream, Tool as FigTool, ToolResultStatus};
 use crate::database::Database;
 use crate::database::settings::Setting;
-use crate::mcp_client::{
-    Prompt,
-    PromptGetResult,
-};
+use crate::mcp_client::{Prompt, PromptGetResult};
 use crate::platform::Context;
 use crate::telemetry::core::ToolUseEventBuilder;
-use crate::telemetry::{
-    ReasonCode,
-    TelemetryResult,
-    TelemetryThread,
-    get_error_reason,
-};
+use crate::telemetry::{ReasonCode, TelemetryResult, TelemetryThread, get_error_reason};
+use crate::util::directories::logs_dir;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Args)]
 pub struct ChatArgs {
@@ -358,6 +260,7 @@ impl ChatArgs {
         .await?;
 
         let result = chat.try_chat(database, telemetry).await.map(|_| ExitCode::SUCCESS);
+        let _ = chat.log_chat_state().await;
         drop(chat); // Explicit drop for clarity
 
         result
@@ -825,6 +728,17 @@ impl ChatContext {
         Ok(content.trim().to_string())
     }
 
+    async fn log_chat_state(&mut self) -> Result<()> {
+        let contents = serde_json::to_string_pretty(&self.conversation_state).unwrap();
+
+        let _ = self
+            .ctx
+            .fs()
+            .write(logs_dir().unwrap().join("logs.json"), contents)
+            .await;
+        return Ok(());
+    }
+
     async fn try_chat(&mut self, database: &mut Database, telemetry: &TelemetryThread) -> Result<()> {
         let is_small_screen = self.terminal_width() < GREETING_BREAK_POINT;
         if self.interactive && database.settings.get_bool(Setting::ChatGreetingEnabled).unwrap_or(true) {
@@ -981,7 +895,9 @@ impl ChatContext {
                         Err(ChatError::Interrupted { tool_uses: None })
                     }
                 },
-                ChatState::Exit => return Ok(()),
+                ChatState::Exit => {
+                    return self.log_chat_state().await;
+                },
             };
 
             next_state = Some(self.handle_state_execution_result(telemetry, database, result).await?);
@@ -1445,7 +1361,9 @@ impl ChatContext {
         )?;
         let user_input = match self.read_user_input(&self.generate_tool_trust_prompt(), false) {
             Some(input) => input,
-            None => return Ok(ChatState::Exit),
+            None => {
+                return Ok(ChatState::Exit);
+            },
         };
 
         self.conversation_state.append_user_transcript(&user_input);
